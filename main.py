@@ -192,11 +192,11 @@ class MainGame:
                     vec_len = (vec_x ** 2 + vec_y ** 2) ** 0.5
                     vec_x /= vec_len
                     vec_y /= vec_len
-                    f = INTER_G * d1.weight * d2.weight / dis ** 2
-                    d1.speed_x += f * vec_x / d1.weight * FPS_TIME
-                    d1.speed_y += f * vec_y / d1.weight * FPS_TIME
-                    d2.speed_x += -f * vec_x / d2.weight * FPS_TIME
-                    d2.speed_y += -f * vec_y / d2.weight * FPS_TIME
+                    f = INTER_G * d1.mass * d2.mass / dis ** 2
+                    d1.speed_x += f * vec_x / d1.mass * FPS_TIME
+                    d1.speed_y += f * vec_y / d1.mass * FPS_TIME
+                    d2.speed_x += -f * vec_x / d2.mass * FPS_TIME
+                    d2.speed_y += -f * vec_y / d2.mass * FPS_TIME
                     inter.append((d1, d2))
 
     def update_all_ball(self):
@@ -361,17 +361,17 @@ class Ball(BaseItem):
             other.rect.top = int(other.y * PIX_PER_METER - other.rect.height / 2)
 
             self.speed_x = \
-                v_ori_x1 + ((self.weight - other.weight) * vx1 + 2 * other.weight * vx2) / \
-                (self.weight + other.weight)
+                v_ori_x1 + ((self.weight - other.mass) * vx1 + 2 * other.mass * vx2) / \
+                (self.weight + other.mass)
             other.speed_x = \
-                v_ori_x2 + ((other.weight - self.weight) * vx2 + 2 * self.weight * vx1) / \
-                (self.weight + other.weight)
+                v_ori_x2 + ((other.mass - self.weight) * vx2 + 2 * self.weight * vx1) / \
+                (self.weight + other.mass)
             self.speed_y = \
-                v_ori_y1 + ((self.weight - other.weight) * vy1 + 2 * other.weight * vy2) / \
-                (self.weight + other.weight)
+                v_ori_y1 + ((self.weight - other.mass) * vy1 + 2 * other.mass * vy2) / \
+                (self.weight + other.mass)
             other.speed_y = \
-                v_ori_y2 + ((other.weight - self.weight) * vy2 + 2 * self.weight * vy1) / \
-                (self.weight + other.weight)
+                v_ori_y2 + ((other.mass - self.weight) * vy2 + 2 * self.weight * vy1) / \
+                (self.weight + other.mass)
             return True
         return False
 
@@ -409,7 +409,7 @@ def collide(ball1: Ball, ball2: Ball):
 
 
 def code(x, y):
-    x = y**2
+    x = y ** 2
 
 
 # class MyBall(Ball):

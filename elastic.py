@@ -9,39 +9,56 @@ COLLIDE_TREE_MIN_SIZE = 5
 FPS = 59
 FPS_TIME = 1. / FPS
 COLOR_BG = pygame.Color(23, 23, 23)
-PIX_PER_METER = 75
-SCREEN_HEIGHT = 600
-SCREEN_WIDTH = 600
+PIX_PER_METER = 100
+SCREEN_HEIGHT = 700
+SCREEN_WIDTH = 800
 
-MU = 0.0
+MU = 0.1
 G = 9.8
 INTER_G = 6.67 * 1e-11
 # K_AIR = 1.2258
-K_AIR = 0
-KEY_ACC = 25
+K_AIR = 0.5
+KEY_ACC = 50
+K_ELASTIC = 200
 
+RIGID = 5
 DEAD_COUNT = 1
-BALL_COUNT = 5
+BALL_COUNT = RIGID * RIGID - 1
 
-GRAVITY_SWITCH = False
-INTER_GRAVITY_SWITCH = True
+DOWNWARD_GRAVITY_ON = 0
+INTER_GRAVITY_ON = 0
 
-ELASTIC_SWITCH = True
+ELASTIC_COLLISION_ON = True
 
 AVOID_INTER_SUBMERGE = False
 AVOID_EDGE_SUBMERGE = False
 
-WEIGHT1 = 1e9
-WEIGHT2 = 1e9
+# 可以控制的球
+WEIGHT1 = 1.
+# 不可控制的球
+WEIGHT2 = 1
 
 IMG_SRC1 = 'pic/earth_96.png'
 IMG_SRC2 = 'pic/satern_16.png'
+
+
+def get_dis(x1, y1, x2, y2):
+    return ((x2 - x1) ** 2 + (y2 - y1) ** 2) ** 0.5
+
+
+def get_vec(x1, y1, x2, y2):
+    vec_x, vec_y = x2 - x1, y2 - y1
+    vec_len = get_dis(x1, y1, x2, y2)
+    vec_x /= vec_len
+    vec_y /= vec_len
+    return vec_x, vec_y
 
 
 class MainGame:
     _display = pygame.display
     window = None
     ball_list = []
+    elastic_list = []
     clock = pygame.time.Clock()
     collides = []
     hide_ball0 = False
@@ -52,6 +69,26 @@ class MainGame:
         self.window = self._display.set_mode([SCREEN_WIDTH, SCREEN_HEIGHT])
         self.create_my_ball()
         self.create_dead_ball()
+        # self.elastic_list.append(Elastic(self.ball_list[0],
+        #                                  self.ball_list[1],
+        #                                  balance_len=1.))
+
+        def legal(x, y):
+            return 0 <= x < RIGID and 0 <= y < RIGID
+
+        for i in range(RIGID * RIGID):
+            x = i // RIGID
+            y = i % RIGID
+            for x1 in (x - 1, x, x + 1):
+                for y1 in (y - 1, y, y + 1):
+                    if (not legal(x1, y1)) or (x1 == x and y1 == y):
+                        continue
+                    num = x1 * RIGID + y1
+                    if i < num:
+                        self.elastic_list.append(Elastic(self.ball_list[i],
+                                                         self.ball_list[num],
+                                                         get_dis(x, y, x1, y1)))
+
         self._display.set_caption("球球模拟器")
 
         last_time = 0
@@ -65,10 +102,12 @@ class MainGame:
 
             self.get_event()
             if not self.fps_pause:
-                self.update_all_ball()
+                self.update_all_balls(FPS_TIME)
 
             for d in self.ball_list:
                 d.display(self.window)  # !!!
+            for e in self.elastic_list:
+                e.display(self.window)
             self._display.update()
 
             time_end = time.time()
@@ -83,28 +122,26 @@ class MainGame:
                 max_power = 0.
 
     def create_my_ball(self):
-        my = Ball(random.random() * (SCREEN_WIDTH / PIX_PER_METER),
-                  random.random() * ((SCREEN_HEIGHT / 2 + 10) / PIX_PER_METER),
-                  # 2,
-                  img_src=IMG_SRC1, weight=WEIGHT1)
+        # my = Ball(random.random() * (SCREEN_WIDTH / PIX_PER_METER),
+        #           random.random() * ((SCREEN_HEIGHT / 2 + 10) / PIX_PER_METER),
+        #           # 2,
+        #           img_src=IMG_SRC1, mass=WEIGHT1)
+
+        my = Ball(1, 1,
+                  img_src=IMG_SRC1, mass=WEIGHT1)
         self.ball_list.append(my)  # 可操作的球员总是在 0 号
 
     def create_dead_ball(self):
-        # y = 1.
-        # place_list = []
-        # for i in range(7):
-        #     place_list.append(float(i + 1))
-
-        # for _ in range(DEAD_COUNT):
-        #     c = random.randrange(len(place_list))
-        #     dead = Ball(place_list[c], y, img_src='pic/satern_big.png', weight=1.0)
-        #     del place_list[c]
-        #     self.ball_list.append(dead)
+        # for i in range(BALL_COUNT):
+        #     self.ball_list.append(Ball(random.random() * (SCREEN_WIDTH / PIX_PER_METER),
+        #                                random.random() * ((SCREEN_HEIGHT / 2 + 10) / PIX_PER_METER),
+        #                                # 2,
+        #                                img_src=IMG_SRC2, mass=WEIGHT2))
         for i in range(BALL_COUNT):
-            self.ball_list.append(Ball(random.random() * (SCREEN_WIDTH / PIX_PER_METER),
-                                       random.random() * ((SCREEN_HEIGHT / 2 + 10) / PIX_PER_METER),
-                                       # 2,
-                                       img_src=IMG_SRC2, weight=WEIGHT2))
+            x = (i + 1) // RIGID
+            y = (i + 1) % RIGID
+            self.ball_list.append(Ball(1 + x * 1, 1 + y * 1,
+                                  img_src=IMG_SRC2, mass=WEIGHT2))
 
     def collide_split(self, node_list: list, x1, y1, x2, y2):
         if len(node_list) == 0:
@@ -162,22 +199,22 @@ class MainGame:
         g_sum_x, g_sum_y = 0., 0.
         m_sum = 0.
         for d in self.ball_list:
-            g_sum_x += d.x * d.weight
-            g_sum_y += d.y * d.weight
-            m_sum += d.weight
+            g_sum_x += d.x * d.mass
+            g_sum_y += d.y * d.mass
+            m_sum += d.mass
         for d in self.ball_list:
-            g_sum_x_no_d = g_sum_x - d.x * d.weight
-            g_sum_y_no_d = g_sum_y - d.y * d.weight
-            m_sum_no_d = m_sum - d.weight
+            g_sum_x_no_d = g_sum_x - d.x * d.mass
+            g_sum_y_no_d = g_sum_y - d.y * d.mass
+            m_sum_no_d = m_sum - d.mass
             center_x, center_y = g_sum_x_no_d / m_sum_no_d, g_sum_y_no_d / m_sum_no_d
             dis = ((center_x - d.x) ** 2 + (center_y - d.y) ** 2) ** 0.5
             vec_x, vec_y = center_x - d.x, center_y - d.y
             vec_len = (vec_x ** 2 + vec_y ** 2) ** 0.5
             vec_x /= vec_len
             vec_y /= vec_len
-            f = INTER_G * d.weight * m_sum_no_d / dis ** 2
-            d.speed_x += f * vec_x / d.weight * FPS_TIME
-            d.speed_y += f * vec_y / d.weight * FPS_TIME
+            f = INTER_G * d.mass * m_sum_no_d / dis ** 2
+            d.speed_x += f * vec_x / d.mass * FPS_TIME
+            d.speed_y += f * vec_y / d.mass * FPS_TIME
 
         # inter = []
         # for d1 in self.ball_list:
@@ -199,11 +236,13 @@ class MainGame:
         #             d2.speed_y += -f * vec_y / d2.weight * FPS_TIME
         #             inter.append((d1, d2))
 
-    def update_all_ball(self):
+    def update_all_balls(self, t):
 
         for d in self.ball_list:
             d.move()
             d.hit_edge()
+        for e in self.elastic_list:
+            e.affect(t)
 
         self.collides = []
         self.collide_split(self.ball_list, 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT)
@@ -215,7 +254,7 @@ class MainGame:
         #         if d1 != d2 and d1.hit_other(d2):
         #             self.collides.append((d1, d2))
 
-        if INTER_GRAVITY_SWITCH:
+        if INTER_GRAVITY_ON:
             self.inter_gravity()
 
     def get_event(self):
@@ -262,9 +301,9 @@ class BaseItem(pygame.sprite.Sprite):
 
 
 class Ball(BaseItem):
-    def __init__(self, x, y, img_src='pic/circle.png', weight=1.0):
+    def __init__(self, x, y, img_src='pic/circle.png', mass=1.0, elastic_list=[]):
         super(Ball, self).__init__()
-        self.weight = weight
+        self.mass = mass
         self.image = pygame.image.load(img_src)
         self.x = x
         self.y = y
@@ -301,9 +340,9 @@ class Ball(BaseItem):
             self.speed_y += -MU * G * norm_speed_y * FPS_TIME
             # 空气阻力
             self.speed_x += \
-                -K_AIR * vec_speed_len ** 2 * self.radius ** 2 * math.pi * norm_speed_x / self.weight * FPS_TIME
+                -K_AIR * vec_speed_len ** 2 * self.radius ** 2 * math.pi * norm_speed_x / self.mass * FPS_TIME
             self.speed_y += \
-                -K_AIR * vec_speed_len ** 2 * self.radius ** 2 * math.pi * norm_speed_y / self.weight * FPS_TIME
+                -K_AIR * vec_speed_len ** 2 * self.radius ** 2 * math.pi * norm_speed_y / self.mass * FPS_TIME
 
         # 阻力过度
         if (self.speed_x_last > EPS) != (self.speed_x > EPS):
@@ -320,11 +359,16 @@ class Ball(BaseItem):
         if self.power['D']:
             self.speed_y += KEY_ACC * FPS_TIME
 
-        if GRAVITY_SWITCH:
+        if DOWNWARD_GRAVITY_ON:
             self.speed_y += G * FPS_TIME
 
         self.rect.left = int(self.x * PIX_PER_METER - self.rect.width / 2)
         self.rect.top = int(self.y * PIX_PER_METER - self.rect.height / 2)
+
+    def receive_f(self, f, vec_x, vec_y, t):
+        a = f / self.mass
+        self.speed_x += a * vec_x * t
+        self.speed_y += a * vec_y * t
 
     def hit_other(self, other) -> bool:
         # 弹性碰撞
@@ -361,17 +405,17 @@ class Ball(BaseItem):
             other.rect.top = int(other.y * PIX_PER_METER - other.rect.height / 2)
 
             self.speed_x = \
-                v_ori_x1 + ((self.weight - other.weight) * vx1 + 2 * other.weight * vx2) / \
-                (self.weight + other.weight)
+                v_ori_x1 + ((self.mass - other.mass) * vx1 + 2 * other.mass * vx2) / \
+                (self.mass + other.mass)
             other.speed_x = \
-                v_ori_x2 + ((other.weight - self.weight) * vx2 + 2 * self.weight * vx1) / \
-                (self.weight + other.weight)
+                v_ori_x2 + ((other.mass - self.mass) * vx2 + 2 * self.mass * vx1) / \
+                (self.mass + other.mass)
             self.speed_y = \
-                v_ori_y1 + ((self.weight - other.weight) * vy1 + 2 * other.weight * vy2) / \
-                (self.weight + other.weight)
+                v_ori_y1 + ((self.mass - other.mass) * vy1 + 2 * other.mass * vy2) / \
+                (self.mass + other.mass)
             other.speed_y = \
-                v_ori_y2 + ((other.weight - self.weight) * vy2 + 2 * self.weight * vy1) / \
-                (self.weight + other.weight)
+                v_ori_y2 + ((other.mass - self.mass) * vy2 + 2 * self.mass * vy1) / \
+                (self.mass + other.mass)
             return True
         return False
 
@@ -404,12 +448,33 @@ class Ball(BaseItem):
         window.blit(self.image, self.rect)
 
 
+class Elastic:
+    def __init__(self, d1: Ball, d2: Ball, balance_len):
+        self.d1 = d1
+        self.d2 = d2
+        self.balance_len = balance_len
+
+    def affect(self, t):
+        # 从 1 指向 2
+        vec_x, vec_y = get_vec(self.d1.x, self.d1.y, self.d2.x, self.d2.y)
+        dis = get_dis(self.d1.x, self.d1.y, self.d2.x, self.d2.y)
+        f = K_ELASTIC * (dis - self.balance_len)
+        self.d1.receive_f(f, vec_x, vec_y, t)
+        self.d2.receive_f(f, -vec_x, -vec_y, t)
+
+    def display(self, window: pygame.Surface):
+        pygame.draw.line(window, (255, 255, 255),
+                         (self.d1.x * PIX_PER_METER, self.d1.y * PIX_PER_METER),
+                         (self.d2.x * PIX_PER_METER, self.d2.y * PIX_PER_METER),
+                         2)
+
+
 def collide(ball1: Ball, ball2: Ball):
     return ((ball1.x - ball2.x) ** 2 + (ball1.y - ball2.y) ** 2) ** 0.5 < ball1.radius + ball2.radius
 
 
 def code(x, y):
-    x = y**2
+    x = y ** 2
 
 
 # class MyBall(Ball):
