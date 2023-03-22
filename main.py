@@ -3,13 +3,14 @@ import random
 import time
 import math
 
+# 加点注释，就是因为无聊
 EPS = 1e-12
 COLLIDE_TREE_MIN_SIZE = 5
 
 FPS = 59
 FPS_TIME = 1. / FPS
 COLOR_BG = pygame.Color(23, 23, 23)
-PIX_PER_METER = 75
+PIX_PER_METER = 30
 SCREEN_HEIGHT = 600
 SCREEN_WIDTH = 600
 
